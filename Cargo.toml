@@ -37,6 +37,7 @@ harness = false
 
 [[example]]
 name = "mock"
+path = "examples/src/mock.rs"
 required-features = ["test-util"]
 
 [profile.release]

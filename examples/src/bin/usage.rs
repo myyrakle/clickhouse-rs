@@ -142,6 +142,7 @@ async fn watch(client: &Client) -> Result<()> {
     Ok(())
 }
 
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let client = Client::default().with_url("http://localhost:8123");
