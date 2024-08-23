@@ -63,6 +63,7 @@ mod query;
 mod time;
 mod uuid;
 mod watch;
+mod fixed_string;
 
 const HOST: &str = "localhost:8123";
 

@@ -338,3 +338,38 @@ pub mod time {
         }
     }
 }
+
+/// Ser UTF8 [`String`] to `FixedString(N)`.
+pub fn serialize_fixed_string<S, const N: usize>(
+    str: impl Into<String>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let mut src_bytes = str.into().bytes().collect::<Vec<u8>>();
+    if src_bytes.len() < N {
+        src_bytes.resize(N, b'\0')
+    }
+    src_bytes[0].serialize(serializer)
+}
+
+/// De UTF8 [`String`] from `FixedString(N)`.
+pub fn deserialize_fixed_string<'de, D, const N: usize>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    use serde::de::Error as _;
+    let bytes: &[u8] = Deserialize::deserialize(deserializer)?;
+    let first_null_idx = bytes
+        .iter()
+        .position(|&b| b == b'\0')
+        .unwrap_or(bytes.len());
+    let result = String::from_utf8(bytes[0..first_null_idx].to_vec()).map_err(|err| {
+        D::Error::custom(format!(
+            "Failed to deserialize FixedString, cause: {}",
+            err.to_string()
+        ))
+    })?;
+    Ok(result)
+}
