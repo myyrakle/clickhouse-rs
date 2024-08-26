@@ -357,8 +357,37 @@ See [examples](https://github.com/ClickHouse/clickhouse-rs/tree/main/examples).
     }
     ```
     </details>
-* `Typle(A, B, ...)` maps to/from `(A, B, ...)` or a newtype around it.
-* `Array(_)` maps to/from any slice, e.g. `Vec<_>`, `&[_]`. Newtypes are also supported.
+* `Tuple(A, B, ...)` maps to/from `(A, B, ...)` or a newtype around it.
+* `Array(_)` maps to/from any slice, e.g. `Vec<_>`, `&[_]`. Newtypes are also supported. For `clickhouse::serde::*` helpers, add `::seq`:
+    <details>
+    <summary>Example</summary>
+
+    ```rust,ignore
+    #[derive(Debug, PartialEq, Row, Serialize, Deserialize)]
+    struct MyRow {
+        id: u32,
+        str_seq: Vec<String>,
+        #[serde(with = "clickhouse::serde::ipv4::seq")]
+        ipv4_seq: Vec<Ipv4Addr>,
+        #[serde(with = "clickhouse::serde::uuid::seq")]
+        uuid_seq: Vec<Uuid>,
+        #[serde(with = "clickhouse::serde::time::date::seq")]
+        date_seq: Vec<time::Date>,
+        #[serde(with = "clickhouse::serde::time::date32::seq")]
+        date32_seq: Vec<time::Date>,
+        #[serde(with = "clickhouse::serde::time::datetime::seq")]
+        datetime_seq: Vec<time::OffsetDateTime>,
+        #[serde(with = "clickhouse::serde::time::datetime64::secs::seq")]
+        datetime64_0_seq: Vec<time::OffsetDateTime>,
+        #[serde(with = "clickhouse::serde::time::datetime64::millis::seq")]
+        datetime64_3_seq: Vec<time::OffsetDateTime>,
+        #[serde(with = "clickhouse::serde::time::datetime64::micros::seq")]
+        datetime64_6_seq: Vec<time::OffsetDateTime>,
+        #[serde(with = "clickhouse::serde::time::datetime64::nanos::seq")]
+        datetime64_9_seq: Vec<time::OffsetDateTime>,
+    }
+    ```
+    </details>
 * `Map(K, V)` behaves like `Array((K, V))`.
 * `LowCardinality(_)` is supported seamlessly.
 * `Nullable(_)` maps to/from `Option<_>`. For `clickhouse::serde::*` helpers add `::option`.

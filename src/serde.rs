@@ -43,6 +43,49 @@ macro_rules! option {
     };
 }
 
+macro_rules! seq {
+    ($name:ident, $doc:literal) => {
+        #[doc = $doc]
+        pub mod seq {
+            use super::*;
+            use serde::ser::SerializeSeq;
+
+            struct $name(super::$name);
+
+            impl Serialize for $name {
+                fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                    super::serialize(&self.0, serializer)
+                }
+            }
+
+            impl<'de> Deserialize<'de> for $name {
+                fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                    super::deserialize(deserializer).map($name)
+                }
+            }
+
+            pub fn serialize<S>(v: &Vec<super::$name>, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                let mut seq = serializer.serialize_seq(Some(v.len()))?;
+                for item in v {
+                    seq.serialize_element(&$name(item.clone()))?;
+                }
+                seq.end()
+            }
+
+            pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<super::$name>, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                let vec: Vec<$name> = Deserialize::deserialize(deserializer)?;
+                Ok(vec.into_iter().map(|v| v.0).collect())
+            }
+        }
+    };
+}
+
 /// Ser/de [`std::net::Ipv4Addr`] to/from `IPv4`.
 pub mod ipv4 {
     use std::net::Ipv4Addr;
@@ -53,6 +96,7 @@ pub mod ipv4 {
         Ipv4Addr,
         "Ser/de `Option<Ipv4Addr>` to/from `Nullable(IPv4)`."
     );
+    seq!(Ipv4Addr, "Ser/de `Vec<Ipv4Addr>` to/from `Array(IPv4)`.");
 
     pub fn serialize<S>(ipv4: &Ipv4Addr, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -78,6 +122,7 @@ pub mod uuid {
     use super::*;
 
     option!(Uuid, "Ser/de `Option<Uuid>` to/from `Nullable(UUID)`.");
+    seq!(Uuid, "Ser/de `Vec<Uuid>` to/from `Array(UUID)`.");
 
     pub fn serialize<S>(uuid: &Uuid, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -114,6 +159,10 @@ pub mod time {
             OffsetDateTime,
             "Ser/de `Option<OffsetDateTime>` to/from `Nullable(DateTime)`."
         );
+        seq!(
+            OffsetDateTime,
+            "Ser/de `Vec<OffsetDateTime>` to/from `Array(DateTime)`."
+        );
 
         pub fn serialize<S>(dt: &OffsetDateTime, serializer: S) -> Result<S::Ok, S::Error>
         where
@@ -147,6 +196,10 @@ pub mod time {
                 OffsetDateTime,
                 "Ser/de `Option<OffsetDateTime>` to/from `Nullable(DateTime64(0))`."
             );
+            seq!(
+                OffsetDateTime,
+                "Ser/de `Vec<OffsetDateTime>` to/from `Array(DateTime64(0))`."
+            );
 
             pub fn serialize<S>(dt: &OffsetDateTime, serializer: S) -> Result<S::Ok, S::Error>
             where
@@ -170,6 +223,10 @@ pub mod time {
             option!(
                 OffsetDateTime,
                 "Ser/de `Option<OffsetDateTime>` to/from `Nullable(DateTime64(3))`."
+            );
+            seq!(
+                OffsetDateTime,
+                "Ser/de `Vec<OffsetDateTime>` to/from `Array(DateTime64(3))`."
             );
 
             pub fn serialize<S>(dt: &OffsetDateTime, serializer: S) -> Result<S::Ok, S::Error>
@@ -195,6 +252,10 @@ pub mod time {
                 OffsetDateTime,
                 "Ser/de `Option<OffsetDateTime>` to/from `Nullable(DateTime64(6))`."
             );
+            seq!(
+                OffsetDateTime,
+                "Ser/de `Vec<OffsetDateTime>` to/from `Array(DateTime64(6))`."
+            );
 
             pub fn serialize<S>(dt: &OffsetDateTime, serializer: S) -> Result<S::Ok, S::Error>
             where
@@ -218,6 +279,10 @@ pub mod time {
             option!(
                 OffsetDateTime,
                 "Ser/de `Option<OffsetDateTime>` to/from `Nullable(DateTime64(9))`."
+            );
+            seq!(
+                OffsetDateTime,
+                "Ser/de `Vec<OffsetDateTime>` to/from `Array(DateTime64(9))`."
             );
 
             pub fn serialize<S>(dt: &OffsetDateTime, serializer: S) -> Result<S::Ok, S::Error>
@@ -264,6 +329,7 @@ pub mod time {
             Date,
             "Ser/de `Option<time::Date>` to/from `Nullable(Date)`."
         );
+        seq!(Date, "Ser/de `Vec<time::Date>` to/from `Array(Date)`.");
 
         const ORIGIN: Result<Date, ComponentRange> = Date::from_ordinal_date(1970, 1);
 
@@ -302,6 +368,7 @@ pub mod time {
             Date,
             "Ser/de `Option<time::Date>` to/from `Nullable(Date32)`."
         );
+        seq!(Date, "Ser/de `Vec<time::Date>` to/from `Array(Date32)`.");
 
         const ORIGIN: Result<Date, ComponentRange> = Date::from_ordinal_date(1970, 1);
 
