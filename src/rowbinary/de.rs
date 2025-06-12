@@ -39,9 +39,9 @@ pub(crate) fn deserialize_row_binary<'data, 'cursor, T: Deserialize<'data> + Row
 /// This is used when [`crate::Row`] validation is enabled in the client (default).
 pub(crate) fn deserialize_rbwnat<'data, 'cursor, T: Deserialize<'data> + Row>(
     input: &mut &'data [u8],
-    metadata: Option<&'cursor RowMetadata>,
+    metadata: &'cursor RowMetadata,
 ) -> Result<T> {
-    let validator = DataTypeValidator::new(metadata.unwrap());
+    let validator = DataTypeValidator::new(metadata);
     let mut deserializer = RowBinaryDeserializer::<T, _>::new(input, validator);
     T::deserialize(&mut deserializer)
 }

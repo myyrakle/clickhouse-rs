@@ -25,6 +25,7 @@ async fn max_execution_time(mut client: Client, wait_end_of_query: bool) -> u8 {
 
     // TODO: check different `timeout_overflow_mode`
     let mut cursor = client
+        .with_disabled_validation()
         .with_compression(Compression::None)
         // fails on the 4th row
         .with_option("max_execution_time", "0.1")
@@ -32,6 +33,7 @@ async fn max_execution_time(mut client: Client, wait_end_of_query: bool) -> u8 {
         .with_option("max_block_size", "1")
         .query("SELECT sleepEachRow(0.03) AS s FROM system.numbers LIMIT 5")
         .fetch::<u8>()
+        .await
         .unwrap();
 
     let mut i = 0;
@@ -49,7 +51,9 @@ async fn max_execution_time(mut client: Client, wait_end_of_query: bool) -> u8 {
 #[cfg(feature = "lz4")]
 #[tokio::test]
 async fn deferred_lz4() {
-    let client = prepare_database!().with_compression(Compression::Lz4);
+    let client = prepare_database!()
+        .with_compression(Compression::Lz4)
+        .with_disabled_validation();
 
     client
         .query("CREATE TABLE test(no UInt32) ENGINE = MergeTree ORDER BY no")
@@ -84,6 +88,7 @@ async fn deferred_lz4() {
         .with_option("max_execution_time", "0.1")
         .query("SELECT no FROM test")
         .fetch::<u32>()
+        .await
         .unwrap();
 
     let mut i = 0;

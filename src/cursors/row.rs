@@ -11,43 +11,45 @@ use clickhouse_types::parse_rbwnat_columns_header;
 use serde::Deserialize;
 use std::marker::PhantomData;
 
+enum ValidationMode {
+    Enabled(Box<RowMetadata>),
+    Disabled,
+}
+
 /// A cursor that emits rows deserialized as structures from RowBinary.
 #[must_use]
 pub struct RowCursor<T> {
     raw: RawCursor,
     bytes: BytesExt,
-    validation: bool,
-    /// [`None`] until the first call to [`RowCursor::next()`],
-    /// as [`RowCursor::new`] is not `async`, so it loads lazily.
-    row_metadata: Option<RowMetadata>,
+    validation: ValidationMode,
     _marker: PhantomData<T>,
 }
 
-impl<T> RowCursor<T> {
-    pub(crate) fn new(response: Response, validation: bool) -> Self {
-        Self {
-            _marker: PhantomData,
-            raw: RawCursor::new(response),
-            bytes: BytesExt::default(),
-            row_metadata: None,
-            validation,
-        }
-    }
-
-    #[cold]
-    #[inline(never)]
-    async fn read_columns(&mut self) -> Result<()>
-    where
-        T: Row,
-    {
-        loop {
-            if self.bytes.remaining() > 0 {
-                let mut slice = self.bytes.slice();
+impl<T: Row> RowCursor<T> {
+    pub(crate) async fn new(response: Response, validation: bool) -> Result<Self> {
+        let mut bytes = BytesExt::default();
+        let mut raw = RawCursor::new(response);
+        if validation {
+            loop {
+                match raw.next().await? {
+                    Some(chunk) => bytes.extend(chunk),
+                    None => {
+                        return Err(Error::BadResponse(
+                            "Could not read columns header".to_string(),
+                        ));
+                    }
+                }
+                let mut slice = bytes.slice();
                 match parse_rbwnat_columns_header(&mut slice) {
                     Ok(columns) if !columns.is_empty() => {
-                        self.bytes.set_remaining(slice.len());
-                        self.row_metadata = Some(RowMetadata::new::<T>(columns));
-                        return Ok(());
+                        bytes.set_remaining(slice.len());
+                        let row_metadata = RowMetadata::new::<T>(columns);
+                        return Ok(Self {
+                            raw,
+                            bytes,
+                            validation: ValidationMode::Enabled(Box::new(row_metadata)),
+                            _marker: PhantomData,
+                        });
                     }
                     Ok(_) => {
                         // This does not panic, as it could be a network issue
@@ -63,17 +65,13 @@ impl<T> RowCursor<T> {
                     }
                 }
             }
-            match self.raw.next().await? {
-                Some(chunk) => self.bytes.extend(chunk),
-                None if self.row_metadata.is_none() => {
-                    // Similar to the other BadResponse branch above
-                    return Err(Error::BadResponse(
-                        "Could not read columns header".to_string(),
-                    ));
-                }
-                // if the result set is empty, there is only the columns header
-                None => return Ok(()),
-            }
+        } else {
+            Ok(Self {
+                raw,
+                bytes,
+                validation: ValidationMode::Disabled,
+                _marker: PhantomData,
+            })
         }
     }
 
@@ -91,26 +89,25 @@ impl<T> RowCursor<T> {
         loop {
             if self.bytes.remaining() > 0 {
                 let mut slice: &[u8];
-                let result = if self.validation {
-                    if self.row_metadata.is_none() {
-                        self.read_columns().await?;
-                        if self.bytes.remaining() == 0 {
-                            continue;
-                        }
+                let result = match &self.validation {
+                    ValidationMode::Enabled(row_metadata) => {
+                        slice = super::workaround_51132(self.bytes.slice());
+                        rowbinary::deserialize_rbwnat::<T>(&mut slice, row_metadata)
                     }
-                    slice = super::workaround_51132(self.bytes.slice());
-                    rowbinary::deserialize_rbwnat::<T>(&mut slice, self.row_metadata.as_ref())
-                } else {
-                    slice = super::workaround_51132(self.bytes.slice());
-                    rowbinary::deserialize_row_binary::<T>(&mut slice)
+                    ValidationMode::Disabled => {
+                        slice = super::workaround_51132(self.bytes.slice());
+                        rowbinary::deserialize_row_binary::<T>(&mut slice)
+                    }
                 };
                 match result {
-                    Err(Error::NotEnoughData) => {}
                     Ok(value) => {
                         self.bytes.set_remaining(slice.len());
                         return Ok(Some(value));
                     }
-                    Err(err) => return Err(err),
+                    Err(Error::NotEnoughData) => {}
+                    Err(err) => {
+                        return Err(err);
+                    }
                 }
             }
 

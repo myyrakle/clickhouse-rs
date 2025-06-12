@@ -40,6 +40,7 @@ async fn smoke() {
         .bind(500)
         .bind((42, 504))
         .fetch::<MyRow<'_>>()
+        .await
         .unwrap();
 
     let mut i = 500;
@@ -178,6 +179,7 @@ async fn big_borrowed_str() {
     let mut cursor = client
         .query("SELECT ?fields FROM test")
         .fetch::<MyRow<'_>>()
+        .await
         .unwrap();
 
     let row = cursor.next().await.unwrap().unwrap();

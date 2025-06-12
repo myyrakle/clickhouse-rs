@@ -96,7 +96,8 @@ fn select(c: &mut Criterion) {
         let start = Instant::now();
         let mut cursor = client
             .query("SELECT ?fields FROM some")
-            .fetch::<SomeRow>()?;
+            .fetch::<SomeRow>()
+            .await?;
 
         for _ in 0..iters {
             let Some(row) = cursor.next().await? else {

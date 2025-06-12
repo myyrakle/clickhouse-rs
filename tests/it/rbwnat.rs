@@ -401,6 +401,7 @@ async fn test_borrowed_data() {
             ",
         )
         .fetch::<Data<'_>>()
+        .await
         .unwrap();
 
     let mut result = Vec::new();
@@ -489,6 +490,7 @@ async fn test_many_numbers() {
     let mut cursor = client
         .query("SELECT number FROM system.numbers_mt LIMIT 2000")
         .fetch::<Data>()
+        .await
         .unwrap();
 
     let mut sum = 0;

@@ -61,7 +61,8 @@ async fn fetch(client: &Client) -> Result<()> {
         .bind("foo")
         .bind(500)
         .bind(504)
-        .fetch::<MyRow<'_>>()?;
+        .fetch::<MyRow<'_>>()
+        .await?;
 
     while let Some(row) = cursor.next().await? {
         println!("{row:?}");

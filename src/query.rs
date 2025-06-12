@@ -76,14 +76,15 @@ impl Query {
     ///
     /// let mut cursor = clickhouse::Client::default()
     ///     .query("SELECT ?fields FROM some WHERE no BETWEEN 0 AND 1")
-    ///     .fetch::<MyRow<'_>>()?;
+    ///     .fetch::<MyRow<'_>>()
+    ///     .await?;
     ///
     /// while let Some(MyRow { name, no }) = cursor.next().await? {
     ///     println!("{name}: {no}");
     /// }
     /// # Ok(()) }
     /// ```
-    pub fn fetch<T: Row>(mut self) -> Result<RowCursor<T>> {
+    pub async fn fetch<T: Row>(mut self) -> Result<RowCursor<T>> {
         self.sql.bind_fields::<T>();
 
         let validation = self.client.validation;
@@ -94,11 +95,8 @@ impl Query {
         }
 
         let response = self.do_execute(true)?;
-
-        // #[cfg(feature = "test_util")]
-        // if response.headers
-
-        Ok(RowCursor::new(response, validation))
+        let cursor = RowCursor::new(response, validation).await?;
+        Ok(cursor)
     }
 
     /// Executes the query and returns just a single row.
@@ -108,7 +106,7 @@ impl Query {
     where
         T: Row + for<'b> Deserialize<'b>,
     {
-        match self.fetch()?.next().await {
+        match self.fetch().await?.next().await {
             Ok(Some(row)) => Ok(row),
             Ok(None) => Err(Error::RowNotFound),
             Err(err) => Err(err),
@@ -122,7 +120,7 @@ impl Query {
     where
         T: Row + for<'b> Deserialize<'b>,
     {
-        self.fetch()?.next().await
+        self.fetch().await?.next().await
     }
 
     /// Executes the query and returns all the generated results,
@@ -134,7 +132,7 @@ impl Query {
         T: Row + for<'b> Deserialize<'b>,
     {
         let mut result = Vec::new();
-        let mut cursor = self.fetch::<T>()?;
+        let mut cursor = self.fetch::<T>().await?;
 
         while let Some(row) = cursor.next().await? {
             result.push(row);

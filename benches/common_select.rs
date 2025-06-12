@@ -91,7 +91,7 @@ pub(crate) async fn fetch_cursor<'a, T: BenchmarkRow<'a>>(
     if !validation {
         client = client.with_disabled_validation();
     }
-    client.query(query).fetch::<T>().unwrap()
+    client.query(query).fetch::<T>().await.unwrap()
 }
 
 pub(crate) async fn do_select_bench<'a, T: BenchmarkRow<'a>>(
@@ -121,7 +121,7 @@ pub(crate) struct BenchmarkStats<R> {
 }
 
 impl<R> BenchmarkStats<R> {
-    pub(crate) fn new<T>(cursor: &RowCursor<T>, start: &Instant, result: R) -> Self {
+    pub(crate) fn new<T: Row>(cursor: &RowCursor<T>, start: &Instant, result: R) -> Self {
         let elapsed = start.elapsed();
         let dec_bytes = cursor.decoded_bytes();
         let decoded_mbytes = dec_bytes as f64 / 1024.0 / 1024.0;
