@@ -6,8 +6,6 @@ use crate::{
     response::Response,
     rowbinary, RowRead,
 };
-use clickhouse_types::error::TypesError;
-use clickhouse_types::parse_rbwnat_columns_header;
 use std::marker::PhantomData;
 
 /// A cursor that emits rows deserialized as structures from RowBinary.
@@ -15,7 +13,6 @@ use std::marker::PhantomData;
 pub struct RowCursor<T> {
     raw: RawCursor,
     bytes: BytesExt,
-    validation: bool,
     /// [`None`] until the first call to [`RowCursor::next()`],
     /// as [`RowCursor::new`] is not `async`, so it loads lazily.
     row_metadata: Option<RowMetadata>,
@@ -26,53 +23,9 @@ impl<T> RowCursor<T> {
     pub(crate) fn new(response: Response, validation: bool) -> Self {
         Self {
             _marker: PhantomData,
-            raw: RawCursor::new(response),
+            raw: RawCursor::new(response, validation),
             bytes: BytesExt::default(),
             row_metadata: None,
-            validation,
-        }
-    }
-
-    #[cold]
-    #[inline(never)]
-    async fn read_columns(&mut self) -> Result<()>
-    where
-        T: RowRead,
-    {
-        loop {
-            if self.bytes.remaining() > 0 {
-                let mut slice = self.bytes.slice();
-                match parse_rbwnat_columns_header(&mut slice) {
-                    Ok(columns) if !columns.is_empty() => {
-                        self.bytes.set_remaining(slice.len());
-                        self.row_metadata = Some(RowMetadata::new_for_cursor::<T>(columns));
-                        return Ok(());
-                    }
-                    Ok(_) => {
-                        // This does not panic, as it could be a network issue
-                        // or a malformed response from the server or LB,
-                        // and a simple retry might help in certain cases.
-                        return Err(Error::BadResponse(
-                            "Expected at least one column in the header".to_string(),
-                        ));
-                    }
-                    Err(TypesError::NotEnoughData(_)) => {}
-                    Err(err) => {
-                        return Err(Error::InvalidColumnsHeader(err.into()));
-                    }
-                }
-            }
-            match self.raw.next().await? {
-                Some(chunk) => self.bytes.extend(chunk),
-                None if self.row_metadata.is_none() => {
-                    // Similar to the other BadResponse branch above
-                    return Err(Error::BadResponse(
-                        "Could not read columns header".to_string(),
-                    ));
-                }
-                // if the result set is empty, there is only the columns header
-                None => return Ok(()),
-            }
         }
     }
 
@@ -87,11 +40,6 @@ impl<T> RowCursor<T> {
     where
         T: RowRead,
     {
-        if self.validation && self.row_metadata.is_none() {
-            self.read_columns().await?;
-            debug_assert!(self.row_metadata.is_some());
-        }
-
         loop {
             if self.bytes.remaining() > 0 {
                 let mut slice = self.bytes.slice();
@@ -110,7 +58,7 @@ impl<T> RowCursor<T> {
                 }
             }
 
-            match self.raw.next().await? {
+            match self.raw.next::<T>().await? {
                 Some(chunk) => {
                     // SAFETY: we actually don't have active immutable references at this point.
                     //

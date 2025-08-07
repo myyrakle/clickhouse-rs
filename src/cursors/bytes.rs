@@ -14,7 +14,7 @@ use tokio::io::{AsyncBufRead, AsyncRead, ReadBuf};
 ///
 /// # Integration
 ///
-/// Additionally to [`BytesCursor::next`] and [`BytesCursor::collect`],
+/// In addition to [`BytesCursor::next`] and [`BytesCursor::collect`],
 /// this cursor implements:
 /// * [`AsyncRead`] and [`AsyncBufRead`] for `tokio`-based ecosystem.
 /// * [`futures::Stream`], [`futures::AsyncRead`] and [`futures::AsyncBufRead`]
@@ -41,7 +41,7 @@ pub struct BytesCursor {
 impl BytesCursor {
     pub(crate) fn new(response: Response) -> Self {
         Self {
-            raw: RawCursor::new(response),
+            raw: RawCursor::new(response, false),
             bytes: Bytes::default(),
         }
     }
@@ -57,7 +57,9 @@ impl BytesCursor {
             "mixing `BytesCursor::next()` and `AsyncRead` API methods is not allowed"
         );
 
-        self.raw.next().await
+        // `u64` is used here to satisfy the `RowRead` constraints, but in fact it is ignored,
+        // since there will never be RowMetadata parsing in this cursor.
+        self.raw.next::<u64>().await
     }
 
     /// Collects the whole response into a single [`Bytes`].
@@ -97,7 +99,7 @@ impl BytesCursor {
         // In this case, we should continue polling until we get a non-empty chunk or
         // end of stream in order to avoid false positive `Ok(0)` in I/O traits.
         while self.bytes.is_empty() {
-            match ready!(self.raw.poll_next(cx)?) {
+            match ready!(self.raw.poll_next::<u64>(cx)?) {
                 Some(chunk) => self.bytes = chunk,
                 None => return Poll::Ready(Ok(false)),
             }
