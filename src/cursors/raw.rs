@@ -53,6 +53,11 @@ impl RawCursor {
         )
     }
 
+    #[inline]
+    pub(crate) fn row_metadata(&self) -> Option<&RowMetadata> {
+        self.1.as_ref()
+    }
+
     pub(crate) async fn next<T: RowRead>(&mut self) -> Result<Option<Bytes>> {
         std::future::poll_fn(|cx| self.poll_next::<T>(cx)).await
     }
@@ -88,7 +93,7 @@ impl RawCursor {
     #[cold]
     #[inline(never)]
     fn poll_resolve<T: RowRead>(&mut self, cx: &mut Context<'_>) -> Poll<Result<Option<Bytes>>> {
-        let RawCursorState::Waiting(RawCursorWaiting { future, validation }) = &mut self.0 else {
+        let RawCursorState::Waiting(RawCursorWaiting { ref mut future, validation }) = self.0 else {
             panic!("poll_resolve called in invalid state");
         };
 
@@ -97,7 +102,7 @@ impl RawCursor {
         // in order to provide proper fused behavior of the cursor.
         let ready_chunks = ready!(future.as_mut().poll(cx));
         Poll::Ready(match ready_chunks {
-            Ok(mut chunks) if *validation => {
+            Ok(mut chunks) if validation => {
                 let ParsedRowMetadata {
                     row_metadata,
                     net_size,
@@ -131,6 +136,8 @@ impl RawCursor {
         })
     }
 
+    #[cold]
+    #[inline(never)]
     fn parse_row_metadata<T: RowRead>(
         &mut self,
         chunks: &mut Chunks,

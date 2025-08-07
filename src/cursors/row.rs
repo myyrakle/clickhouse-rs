@@ -1,4 +1,3 @@
-use crate::row_metadata::RowMetadata;
 use crate::{
     bytes_ext::BytesExt,
     cursors::RawCursor,
@@ -13,9 +12,6 @@ use std::marker::PhantomData;
 pub struct RowCursor<T> {
     raw: RawCursor,
     bytes: BytesExt,
-    /// [`None`] until the first call to [`RowCursor::next()`],
-    /// as [`RowCursor::new`] is not `async`, so it loads lazily.
-    row_metadata: Option<RowMetadata>,
     _marker: PhantomData<T>,
 }
 
@@ -25,7 +21,6 @@ impl<T> RowCursor<T> {
             _marker: PhantomData,
             raw: RawCursor::new(response, validation),
             bytes: BytesExt::default(),
-            row_metadata: None,
         }
     }
 
@@ -43,10 +38,8 @@ impl<T> RowCursor<T> {
         loop {
             if self.bytes.remaining() > 0 {
                 let mut slice = self.bytes.slice();
-                let result = rowbinary::deserialize_row::<T::Value<'_>>(
-                    &mut slice,
-                    self.row_metadata.as_ref(),
-                );
+                let result =
+                    rowbinary::deserialize_row::<T::Value<'_>>(&mut slice, self.raw.row_metadata());
 
                 match result {
                     Ok(value) => {
